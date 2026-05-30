@@ -23,3 +23,23 @@ class Message:
 
     def __repr__(self):
         return f"Message(id={self.id}, src={self.source_id}, copies={self.copies_left})"
+
+class Bundle:
+    """
+    バンドルクラス
+    複数のメッセージをまとめたもの
+    """
+    def __init__(self, created_at, source_id, messages, ttl):
+        self.id          = str(uuid.uuid4())[:8]
+        self.created_at  = created_at
+        self.source_id   = source_id
+        self.messages    = messages      # まとめたメッセージリスト
+        self.ttl         = ttl
+        self.copies_left = 1
+        self.hops        = 0
+        self.delivered   = False
+        self.delivered_at = None
+        self.expired     = False
+
+    def is_expired(self, current_time):
+        return (current_time - self.created_at) > self.ttl

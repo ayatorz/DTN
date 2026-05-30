@@ -115,3 +115,30 @@ class Node:
 
     def __repr__(self):
         return f"Node(id={self.id}, x={self.x:.1f}, y={self.y:.1f}, buf={len(self.buffer)})"
+
+# __init__に追加
+self.data_buffer  = []   # 生成したデータ（バンドル化前）
+self.bundle_buffer = []  # バンドル化済み（SCF転送用）
+
+# メソッドを追加
+def generate_data(self, current_time):
+    """データを1件生成してdata_bufferに追加"""
+    from models.message import Message
+    msg = Message(created_at=current_time, source_id=self.id,
+                  size=self.config.MSG_SIZE, ttl=self.config.MSG_TTL)
+    self.data_buffer.append(msg)
+
+def bundle_data(self, current_time):
+    """data_bufferからBUNDLE_SIZE件まとめてバンドル化"""
+    from models.message import Bundle
+    while len(self.data_buffer) >= self.config.BUNDLE_SIZE:
+        msgs = self.data_buffer[:self.config.BUNDLE_SIZE]
+        self.data_buffer = self.data_buffer[self.config.BUNDLE_SIZE:]
+        bundle = Bundle(
+            created_at = current_time,
+            source_id  = self.id,
+            messages   = msgs,
+            ttl        = self.config.MSG_TTL,
+        )
+        bundle.copies_left = self.config.SAW_L
+        self.bundle_buffer.append(bundle)

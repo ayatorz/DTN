@@ -164,8 +164,9 @@ class Simulator:
                 self._handle_ttl_check()
 
         self._print_results()
-        if self.config.OUTPUT_CSV:
-            self._save_csv()
+        # csvの保存
+        # if self.config.OUTPUT_CSV:
+        #     self._save_csv()
 
     # ==================
     # イベントハンドラ
@@ -178,6 +179,16 @@ class Simulator:
         node = random.choice(self.nodes)
         msg  = node.generate_message(self.time)
         self.total_generated += 1
+
+        # データ生成：全ノードが10秒ごとに1件生成
+    def _handle_msg_generate(self):
+        for node in self.nodes:
+            node.generate_data(self.time)
+
+    # バンドル生成：全ノードが30秒ごとにバンドル化
+    def _handle_bundle_generate(self):
+        for node in self.nodes:
+            node.bundle_data(self.time)
 
     def _handle_node_move(self):
         """全ノードを1ステップ移動させる"""

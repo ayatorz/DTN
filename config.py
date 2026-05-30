@@ -29,12 +29,12 @@ NODE_SPAWN_SCHEDULE = {
 # ノード生成場所
 # "random": エリア全体にランダム生成
 # "spawn_points": 指定座標付近に生成
-NODE_SPAWN_AREA = "spawn_points"
+NODE_SPAWN_AREA = "random"
 
 # 生成座標リスト（バスロータリー・駐車場付近を想定）
 SPAWN_POINTS = [
-    (300, 50),   # バスロータリー付近
-    (100, 300),  # 駐車場付近
+    (30, 500),   # バスロータリー付近
+    (500,500 ),  # 駐車場付近
 ]
 SPAWN_RADIUS = 30  # 生成座標からのばらつき半径 [m]
 
@@ -51,14 +51,20 @@ RANGE_NODE_TO_GATEWAY = 100  # 子機→親機通信範囲 [m]
 CONTACT_COOLDOWN = 60
 
 
-# パターンB: 入口付近2台（6号館・8号館入口想定）
-GATEWAY_PATTERN = [
-    (150, 100),  # 6号館入口付近
-    (450, 100),  # 8号館入口付近
+## パターンA：中央1台
+GATEWAY_PATTERN_A = [
+    (300, 300),
 ]
 
-# 使用するパターンを選択
-GATEWAY_POSITIONS = GATEWAY_PATTERN
+# パターンB：入口付近2台（現在使用中）
+GATEWAY_PATTERN_B = [
+    (550,300),  # 6号館入口付近
+    (30,550),   # 8号館入口付近
+]
+
+# 生成パターンの切り替え
+GATEWAY_POSITIONS = GATEWAY_PATTERN_B
+
 
 # --- メッセージ設定 ---
 MSG_GENERATION_INTERVAL = 10    # メッセージ発生頻度 [s]
@@ -70,5 +76,6 @@ SAW_L = 6  # コピー数上限
 
 # --- 出力設定 ---
 OUTPUT_TERMINAL = True   # ターミナルへの出力
-OUTPUT_CSV      = True   # CSV出力
-OUTPUT_CSV_PATH = "result.csv"
+# csvの保存
+# OUTPUT_CSV      = True   # CSV出力
+# OUTPUT_CSV_PATH = "result.csv"
