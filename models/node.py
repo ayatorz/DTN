@@ -1,34 +1,39 @@
 import math
 import random
-from models.message import Message
+from models.message import Message, Bundle
+
 
 class Node:
     """
     子機ノードクラス
-    移動・メッセージ生成・バッファ管理を担う
+    移動・データ生成・バンドル化・バッファ管理を担う
     """
     def __init__(self, node_id, x, y, config):
-        self.id       = node_id
-        self.x        = x
-        self.y        = y
-        self.config   = config
+        self.id     = node_id
+        self.x      = x
+        self.y      = y
+        self.config = config
 
         # 移動関連
-        self.dest_x        = x
-        self.dest_y        = y
-        self.speed         = config.MOVE_SPEED
-        self.pause_time    = 0      # 残り停止時間 [s]
-        self.is_pausing    = False
+        self.dest_x     = x
+        self.dest_y     = y
+        self.speed      = config.MOVE_SPEED
+        self.pause_time = 0
+        self.is_pausing = False
 
-        # バッファ（運搬中のメッセージ）
-        self.buffer = []
+        # データバッファ（バンドル化前の生データ）
+        self.data_buffer = []
+
+        # バンドルバッファ（SCF転送単位）
+        self.bundle_buffer = []
 
         # 接触クールダウン管理 {相手ノードID: 最後の接触時刻}
         self.contact_log = {}
 
         # 統計
-        self.messages_generated  = 0
-        self.messages_forwarded  = 0
+        self.data_generated    = 0
+        self.bundles_generated = 0
+        self.bundles_forwarded = 0
 
     # ==================
     # 移動関連
@@ -41,7 +46,6 @@ class Node:
 
     def move(self, dt):
         """1ステップ分移動する"""
-        # 停止中
         if self.is_pausing:
             self.pause_time -= dt
             if self.pause_time <= 0:
@@ -49,12 +53,10 @@ class Node:
                 self.set_new_destination()
             return
 
-        # 目的地までの距離
         dx   = self.dest_x - self.x
         dy   = self.dest_y - self.y
         dist = math.sqrt(dx**2 + dy**2)
 
-        # 目的地に到着
         if dist <= self.speed * dt:
             self.x = self.dest_x
             self.y = self.dest_y
@@ -64,35 +66,50 @@ class Node:
                 self.config.PAUSE_TIME_MAX
             )
         else:
-            # 目的地に向かって移動
             self.x += (dx / dist) * self.speed * dt
             self.y += (dy / dist) * self.speed * dt
 
     # ==================
-    # メッセージ関連
+    # データ・バンドル生成
     # ==================
 
-    def generate_message(self, current_time):
-        """メッセージを生成してバッファに追加"""
+    def generate_data(self, current_time):
+        """データを1件生成してdata_bufferに追加"""
         msg = Message(
             created_at = current_time,
             source_id  = self.id,
             size       = self.config.MSG_SIZE,
             ttl        = self.config.MSG_TTL,
         )
-        msg.copies_left = self.config.SAW_L
-        self.buffer.append(msg)
-        self.messages_generated += 1
-        return msg
+        self.data_buffer.append(msg)
+        self.data_generated += 1
 
-    def remove_expired_messages(self, current_time):
-        """TTL切れメッセージをバッファから削除"""
-        before = len(self.buffer)
-        for msg in self.buffer:
-            if msg.is_expired(current_time):
-                msg.expired = True
-        self.buffer = [m for m in self.buffer if not m.expired]
-        return before - len(self.buffer)
+    def bundle_data(self, current_time):
+        """
+        data_bufferからBUNDLE_SIZE件まとめてバンドル化
+        BUNDLE_SIZE件に満たない場合はバンドル化しない
+        """
+        while len(self.data_buffer) >= self.config.BUNDLE_SIZE:
+            msgs = self.data_buffer[:self.config.BUNDLE_SIZE]
+            self.data_buffer = self.data_buffer[self.config.BUNDLE_SIZE:]
+            bundle = Bundle(
+                created_at = current_time,
+                source_id  = self.id,
+                messages   = msgs,
+                ttl        = self.config.MSG_TTL,
+            )
+            bundle.copies_left = self.config.SAW_L
+            self.bundle_buffer.append(bundle)
+            self.bundles_generated += 1
+
+    def remove_expired_bundles(self, current_time):
+        """TTL切れバンドルをバッファから削除"""
+        before = len(self.bundle_buffer)
+        for b in self.bundle_buffer:
+            if b.is_expired(current_time):
+                b.expired = True
+        self.bundle_buffer = [b for b in self.bundle_buffer if not b.expired]
+        return before - len(self.bundle_buffer)
 
     # ==================
     # 接触関連
@@ -114,31 +131,4 @@ class Node:
         self.contact_log[other_id] = current_time
 
     def __repr__(self):
-        return f"Node(id={self.id}, x={self.x:.1f}, y={self.y:.1f}, buf={len(self.buffer)})"
-
-# __init__に追加
-self.data_buffer  = []   # 生成したデータ（バンドル化前）
-self.bundle_buffer = []  # バンドル化済み（SCF転送用）
-
-# メソッドを追加
-def generate_data(self, current_time):
-    """データを1件生成してdata_bufferに追加"""
-    from models.message import Message
-    msg = Message(created_at=current_time, source_id=self.id,
-                  size=self.config.MSG_SIZE, ttl=self.config.MSG_TTL)
-    self.data_buffer.append(msg)
-
-def bundle_data(self, current_time):
-    """data_bufferからBUNDLE_SIZE件まとめてバンドル化"""
-    from models.message import Bundle
-    while len(self.data_buffer) >= self.config.BUNDLE_SIZE:
-        msgs = self.data_buffer[:self.config.BUNDLE_SIZE]
-        self.data_buffer = self.data_buffer[self.config.BUNDLE_SIZE:]
-        bundle = Bundle(
-            created_at = current_time,
-            source_id  = self.id,
-            messages   = msgs,
-            ttl        = self.config.MSG_TTL,
-        )
-        bundle.copies_left = self.config.SAW_L
-        self.bundle_buffer.append(bundle)
+        return f"Node(id={self.id}, x={self.x:.1f}, y={self.y:.1f}, bundles={len(self.bundle_buffer)})"

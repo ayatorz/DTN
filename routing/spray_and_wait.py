@@ -1,8 +1,11 @@
+import copy
+
 class SprayAndWait:
     """
     Spray and Wait ルーティング
-    - Sprayフェーズ：コピー数Lが1より多い間、遭遇したノードにコピーを渡す
-    - Waitフェーズ：コピー数が1になったら親機に直接届くまで保持
+    バンドル単位で転送する
+    - Sprayフェーズ：copies_left > 1 の間、遭遇ノードにコピーを渡す
+    - Waitフェーズ：copies_left = 1 になったら親機に直接届くまで保持
     """
 
     def __init__(self, config):
@@ -10,54 +13,52 @@ class SprayAndWait:
 
     def node_to_node(self, node_a, node_b, current_time):
         """
-        子機間のメッセージ交換
-        node_aのバッファからnode_bに転送できるメッセージを渡す
+        子機間のバンドル交換
+        双方向に転送を試みる
         """
         forwarded = []
 
-        for msg in list(node_a.buffer):
-            # すでに配送済み・TTL切れはスキップ
-            if msg.delivered or msg.expired:
+        for bundle in list(node_a.bundle_buffer):
+            if bundle.delivered or bundle.expired:
                 continue
 
-            # Waitフェーズ（コピー1個）はノード間転送しない
-            if msg.copies_left <= 1:
+            # Waitフェーズはノード間転送しない
+            if bundle.copies_left <= 1:
                 continue
 
-            # 同じメッセージをnode_bがすでに持っていたらスキップ
-            b_ids = [m.id for m in node_b.buffer]
-            if msg.id in b_ids:
+            # node_bがすでに同じバンドルを持っていたらスキップ
+            b_ids = [b.id for b in node_b.bundle_buffer]
+            if bundle.id in b_ids:
                 continue
 
             # コピーを分割して渡す
-            import copy
-            new_msg = copy.deepcopy(msg)
-            give    = msg.copies_left // 2
-            new_msg.copies_left = give
-            msg.copies_left    -= give
-            new_msg.hops        = msg.hops + 1
+            new_bundle = copy.deepcopy(bundle)
+            give = bundle.copies_left // 2
+            new_bundle.copies_left = give
+            bundle.copies_left    -= give
+            new_bundle.hops        = bundle.hops + 1
 
-            node_b.buffer.append(new_msg)
-            node_a.messages_forwarded += 1
-            forwarded.append(new_msg)
+            node_b.bundle_buffer.append(new_bundle)
+            node_a.bundles_forwarded += 1
+            forwarded.append(new_bundle)
 
         return forwarded
 
     def node_to_gateway(self, node, gateway, current_time):
         """
-        子機→親機へのメッセージ配送
+        子機→親機へのバンドル配送
         """
         delivered = []
 
-        for msg in list(node.buffer):
-            if msg.delivered or msg.expired:
+        for bundle in list(node.bundle_buffer):
+            if bundle.delivered or bundle.expired:
                 continue
 
-            msg.hops += 1
-            gateway.receive(msg, current_time)
-            delivered.append(msg)
+            bundle.hops += 1
+            gateway.receive(bundle, current_time)
+            delivered.append(bundle)
 
-        # 配送済みメッセージをバッファから削除
-        node.buffer = [m for m in node.buffer if not m.delivered]
+        # 配送済みをバッファから削除
+        node.bundle_buffer = [b for b in node.bundle_buffer if not b.delivered]
 
         return delivered

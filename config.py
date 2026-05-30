@@ -20,21 +20,21 @@ NODE_SPAWN_MODE = "all_at_once"
 # time_basedの場合：時間帯ごとの生成数
 # 例: {0: 50, 3600: 50, 7200: 50, 10800: 50} → 1時間ごとに50台
 NODE_SPAWN_SCHEDULE = {
-    0:     20,
-    3600:  60,
-    7200:  100,
-    10800: 20,
+    0:     50,
+    3600:  50,
+    7200:  50,
+    10800: 50,
 }
 
 # ノード生成場所
 # "random": エリア全体にランダム生成
 # "spawn_points": 指定座標付近に生成
-NODE_SPAWN_AREA = "random"
+NODE_SPAWN_AREA = "spawn_points"
 
 # 生成座標リスト（バスロータリー・駐車場付近を想定）
 SPAWN_POINTS = [
-    (30, 500),   # バスロータリー付近
-    (500,500 ),  # 駐車場付近
+    (300, 50),   # バスロータリー付近
+    (100, 300),  # 駐車場付近
 ]
 SPAWN_RADIUS = 30  # 生成座標からのばらつき半径 [m]
 
@@ -50,32 +50,32 @@ RANGE_NODE_TO_GATEWAY = 100  # 子機→親機通信範囲 [m]
 # 接触クールダウン（同じノード同士の再接触を防ぐ時間）[s]
 CONTACT_COOLDOWN = 60
 
-
-## パターンA：中央1台
+# --- 親機（ゲートウェイ）設定 ---
+# パターンA: 中央1台
 GATEWAY_PATTERN_A = [
     (300, 300),
 ]
 
-# パターンB：入口付近2台（現在使用中）
+# パターンB: 入口付近2台（6号館・8号館入口想定）
 GATEWAY_PATTERN_B = [
-    (550,300),  # 6号館入口付近
-    (30,550),   # 8号館入口付近
+    (150, 100),  # 6号館入口付近
+    (450, 100),  # 8号館入口付近
 ]
 
-# 生成パターンの切り替え
+# 使用するパターンを選択
 GATEWAY_POSITIONS = GATEWAY_PATTERN_B
 
-
-# --- メッセージ設定 ---
-MSG_GENERATION_INTERVAL = 10    # メッセージ発生頻度 [s]
+# --- メッセージ・バンドル設定 ---
+MSG_GENERATION_INTERVAL = 10    # データ生成間隔 [s]
+BUNDLE_INTERVAL         = 30    # バンドル生成間隔 [s]
+BUNDLE_SIZE             = 3     # 1バンドルあたりのデータ件数
 MSG_SIZE                = 120   # メッセージサイズ [byte]
-MSG_TTL                 = 1500  # メッセージ生存時間 [s] (25分)
+MSG_TTL                 = 360   # TTL [s]（6分）
 
 # --- Spray and Wait設定 ---
 SAW_L = 6  # コピー数上限
 
 # --- 出力設定 ---
 OUTPUT_TERMINAL = True   # ターミナルへの出力
-# csvの保存
-# OUTPUT_CSV      = True   # CSV出力
+# OUTPUT_CSV      = True   # CSV出力（今は無効）
 # OUTPUT_CSV_PATH = "result.csv"

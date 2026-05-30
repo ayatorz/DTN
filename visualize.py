@@ -82,7 +82,7 @@ def visualize_initial(config):
 
     ax.legend(loc='upper right', fontsize=9)
     plt.tight_layout()
-    # plt.savefig('initial_placement.png', dpi=150)
+    # plt.savefig('initial_placement.png', dpi=150)  # 保存する場合はコメントアウトを外す
     plt.show()
     # print("[VIZ] initial_placement.png を保存しました")
 
