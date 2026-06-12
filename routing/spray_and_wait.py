@@ -1,6 +1,9 @@
 import copy
 
-class SprayAndWait:
+from routing.base import RoutingProtocol
+
+
+class SprayAndWait(RoutingProtocol):
     """
     Spray and Wait ルーティング
     バンドル単位で転送する
