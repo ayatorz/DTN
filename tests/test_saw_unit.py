@@ -165,7 +165,7 @@ def test_gateway_delivery():
     node = make_node("N")
     gw   = Gateway(gateway_id="GW0", x=0, y=0, config=config)
     created_at, current_time = 100, 150
-    bundle = make_bundle(source_id="N", copies_left=1, created_at=created_at)
+    bundle = make_bundle(source_id="N", copies_left=1, created_at=created_at) #copies_leftを２にしてもPASSした
     node.bundle_buffer.append(bundle)
 
     delivered = routing.node_to_gateway(node, gw, current_time=current_time)
@@ -184,10 +184,10 @@ def test_gateway_delivery():
 
 # ============================================================
 # 6. TTL切れテスト
-#    created_at=0, ttl=100 のバンドルはt=150で期限切れになる
+#    created_at=0, ttl=100 のバンドルはt=101で期限切れになる
 # ============================================================
 def test_ttl_expiry():
-    ttl, current_time = 100, 150
+    ttl, current_time = 100, 101
     node = make_node("N")
     bundle = make_bundle(source_id="N", copies_left=3, created_at=0, ttl=ttl)
     node.bundle_buffer.append(bundle)
@@ -202,8 +202,24 @@ def test_ttl_expiry():
            {"TTL": ttl, "現在時刻": current_time}, expected, actual, passed)
 
 
+def test_ttl_boundary():
+    ttl, current_time = 100, 100
+    node = make_node("N")
+    bundle = make_bundle(source_id="N", copies_left=3, created_at=0, ttl=ttl)
+    node.bundle_buffer.append(bundle)
+
+    removed = node.remove_expired_bundles(current_time=current_time)
+
+    expected = {"削除された件数": 0, "削除後のバッファ件数": 1}
+    actual   = {"削除された件数": removed, "削除後のバッファ件数": len(node.bundle_buffer)}
+    passed = (actual == expected)
+    report("6c. TTL境界テスト",
+           f"生成時刻=0, TTL={ttl} のバンドルは現在時刻={current_time}（ちょうどTTL）ではまだ期限切れにならない",
+           {"TTL": ttl, "現在時刻": current_time}, expected, actual, passed)
+
+
 def test_ttl_not_yet_expired():
-    ttl, current_time = 100, 50
+    ttl, current_time = 100, 99
     node = make_node("N")
     bundle = make_bundle(source_id="N", copies_left=3, created_at=0, ttl=ttl)
     node.bundle_buffer.append(bundle)
@@ -231,8 +247,8 @@ def test_range_boundary():
     dist_in  = a.distance_to(b_in)
     dist_out = a.distance_to(b_out)
 
-    expected = {"境界ちょうどは範囲内": True, "境界+1mは範囲外": True}
-    actual   = {"境界ちょうどは範囲内": dist_in <= r, "境界+1mは範囲外": dist_out > r}
+    expected = {"境界ちょうど(10m)は通信可能": True, "境界+1m(11m)は通信不可": False}
+    actual   = {"境界ちょうど(10m)は通信可能": dist_in <= r, "境界+1m(11m)は通信不可": dist_out <= r}
     passed = (actual == expected)
     report("7. 通信範囲境界テスト",
            f"ノード間通信範囲={r}m の境界ちょうどは範囲内，+1mは範囲外",
@@ -241,23 +257,69 @@ def test_range_boundary():
 
 
 # ============================================================
+# 7b. 親機通信範囲境界テスト
+#     distance == RANGE_NODE_TO_GATEWAY は範囲内（<=），+1すると範囲外
+# ============================================================
+def test_gateway_range_boundary():
+    r  = config.RANGE_NODE_TO_GATEWAY
+    gw = Gateway(gateway_id="GW0", x=0, y=0, config=config)
+    node_in  = make_node("N_in",  x=r,     y=0)
+    node_out = make_node("N_out", x=r + 1, y=0)
+
+    expected = {"境界ちょうど(100m)は通信可能": True, "境界+1m(101m)は通信不可": False}
+    actual   = {"境界ちょうど(100m)は通信可能": gw.in_range(node_in),
+                "境界+1m(101m)は通信不可": gw.in_range(node_out)}
+    passed = (actual == expected)
+    report("7b. 親機通信範囲境界テスト",
+           f"親機通信範囲={r}m の境界ちょうどは範囲内，+1mは範囲外",
+           {"通信範囲(m)": r}, expected, actual, passed)
+
+
+# ============================================================
 # 8. クールダウンテスト
-#    CONTACT_COOLDOWN 以内の再接触は不可，経過後は可能
+#    t=10 で初回接触，10秒ごとに再接触を試み，t=61 で解除を確認
 # ============================================================
 def test_contact_cooldown():
-    cooldown = config.CONTACT_COOLDOWN
-    a = make_node("A")
-    a.record_contact("B", current_time=0)
+    cooldown = config.CONTACT_COOLDOWN  # 60秒
+    routing  = SprayAndWait(config)
+    a   = make_node("A")
+    b   = make_node("B")
+    bundle = make_bundle(source_id="A", copies_left=6, created_at=0)
+    a.bundle_buffer.append(bundle)
 
-    can_before = a.can_contact("B", current_time=cooldown - 1)
-    can_after  = a.can_contact("B", current_time=cooldown)
+    # t=10: 初回接触 → 転送される
+    fwd_10 = routing.node_to_node(a, b, current_time=10)
+    a.record_contact(b.id, current_time=10)
+    b.record_contact(a.id, current_time=10)
 
-    expected = {"クールダウン中に接触可能か": False, "クールダウン後に接触可能か": True}
-    actual   = {"クールダウン中に接触可能か": can_before, "クールダウン後に接触可能か": can_after}
+    # t=20,30,40,50,60: クールダウン中 → 転送されない
+    contacts = {}
+    for t in range(20, 61, 10):
+        b.bundle_buffer.clear()  # 受信バッファをリセットして件数を見やすくする
+        can = a.can_contact(b.id, current_time=t)
+        fwd = routing.node_to_node(a, b, current_time=t) if can else []
+        contacts[f"t={t}秒(CD中)"] = {"接触可能": can, "転送件数": len(fwd)}
+
+    # t=61: クールダウン解除 → 転送される
+    b.bundle_buffer.clear()
+    can_61 = a.can_contact(b.id, current_time=71)
+    fwd_71 = routing.node_to_node(a, b, current_time=71) if can_61 else []
+    contacts["t=71秒(CD解除後)"] = {"接触可能": can_61, "転送件数": len(fwd_71)}
+
+    expected = {
+        "t=10秒(初回)転送件数": 1,
+        "t=20秒(CD中)": {"接触可能": False, "転送件数": 0},
+        "t=30秒(CD中)": {"接触可能": False, "転送件数": 0},
+        "t=40秒(CD中)": {"接触可能": False, "転送件数": 0},
+        "t=50秒(CD中)": {"接触可能": False, "転送件数": 0},
+        "t=60秒(CD中)": {"接触可能": False, "転送件数": 0},
+        "t=71秒(CD解除後)": {"接触可能": True, "転送件数": 1},
+    }
+    actual = {"t=10秒(初回)転送件数": len(fwd_10), **contacts}
     passed = (actual == expected)
     report("8. クールダウンテスト",
-           f"クールダウン={cooldown}秒 以内の再接触は不可，経過後は可能になる",
-           {"クールダウン(秒)": cooldown}, expected, actual, passed)
+           f"t=10で初回接触，クールダウン={cooldown}秒中は転送不可，t=71(解除後)で転送再開",
+           {"クールダウン(秒)": cooldown, "初回接触時刻": 10}, expected, actual, passed)
 
 
 # ============================================================
@@ -275,6 +337,7 @@ test_gateway_delivery()
 test_ttl_expiry()
 test_ttl_not_yet_expired()
 test_range_boundary()
+test_gateway_range_boundary()
 test_contact_cooldown()
 
 print("\n" + "=" * 60)
